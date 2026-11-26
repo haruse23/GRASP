@@ -29,40 +29,66 @@ profile_table <- function(x, name) {
 safe_name <- function(x) gsub("[^A-Za-z0-9_-]", "_", x)
 
 cosine_similarity <- function(x) {
-  den <- sqrt(rowSums(x^2))
-  out <- tcrossprod(x)
-  out / outer(den, den, "*")
+  if (is.null(dim(x))) {
+    x <- Matrix::Matrix(x, nrow = length(x), ncol = 1L, sparse = TRUE)
+  } else {
+    x <- Matrix::Matrix(x, sparse = TRUE)
+  }
+  x <- methods::as(x, "dgCMatrix")
+  sx <- Matrix::summary(x)
+  den <- numeric(nrow(x))
+  sums <- tapply(sx$x^2, sx$i, sum)
+  den[as.integer(names(sums))] <- sums
+  den <- sqrt(den)
+  den[den == 0] <- 1
+  normalized <- x
+  normalized@x <- normalized@x / den[normalized@i + 1L]
+  Matrix::drop0(crossprod(normalized))
 }
 
 jaccard_similarity <- function(x) {
-  binary <- (x > 0) * 1
-  intersection <- tcrossprod(binary)
-  totals <- rowSums(binary)
-  union <- outer(totals, totals, "+") - intersection
-  intersection / union
+  binary <- methods::as(x, "dgCMatrix")
+  binary@x[] <- 1
+  intersection <- Matrix::drop0(crossprod(binary))
+  sb <- Matrix::summary(binary)
+  totals <- tabulate(sb$i, nbins = nrow(binary))
+  ij <- Matrix::summary(intersection)
+  ij$x <- ij$x / (totals[ij$i] + totals[ij$j] - ij$x)
+  Matrix::sparseMatrix(i = ij$i, j = ij$j, x = ij$x,
+                       dims = dim(intersection))
 }
 
 similarity_edges <- function(mat, ids, measure = SIMILARITY,
                              cutoff = SIMILARITY_CUTOFF) {
+  if (is.null(dim(mat))) {
+    mat <- Matrix::Matrix(mat, nrow = length(ids), sparse = TRUE)
+  }
   sim <- switch(
     measure,
     cosine = cosine_similarity(mat),
     jaccard = jaccard_similarity(mat),
     stop("Unsupported similarity measure: ", measure)
   )
-  diag(sim) <- 0
-  ij <- which(upper.tri(sim) & is.finite(sim) & sim > cutoff, arr.ind = TRUE)
+  sim <- Matrix::drop0(sim)
+  ij <- Matrix::summary(sim)
+  ij <- ij[ij$i < ij$j & is.finite(ij$x) & ij$x > cutoff, , drop = FALSE]
   if (!nrow(ij)) {
     return(data.table::data.table(from = character(), to = character(),
                                   weight = numeric(), similarity = character()))
   }
   data.table::data.table(
-    from = ids[ij[, 1]], to = ids[ij[, 2]],
-    weight = sim[ij], similarity = measure
+    from = ids[ij$i], to = ids[ij$j],
+    weight = ij$x, similarity = measure
   )
 }
 
 write_graphml <- function(nodes, edges, path, directed = FALSE) {
+  nodes <- data.table::as.data.table(nodes)
+  edges <- data.table::as.data.table(edges)
+  nodes <- nodes[!is.na(id)]
+  edges <- edges[stats::complete.cases(edges)]
+  edges <- edges[!is.na(from) & !is.na(to)]
+  nodes <- unique(nodes, by = "id")
   g <- igraph::graph_from_data_frame(edges, directed = directed, vertices = nodes)
   igraph::write_graph(g, path, format = "graphml")
 }

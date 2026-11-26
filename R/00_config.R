@@ -30,7 +30,7 @@ NETWORKS <- c(
   student_resource_temporal = "Temporal student-resource snapshots"
 )
 
-required_packages <- c("data.table", "igraph")
+required_packages <- c("data.table", "igraph", "Matrix")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]

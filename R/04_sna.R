@@ -7,23 +7,26 @@ graph_files <- list.files(NETWORK_DIR, pattern = "\\.graphml$", full.names = TRU
 
 analyse_graph <- function(path) {
   g <- igraph::read_graph(path, format = "graphml")
-  if (igraph::ecount(g)) E(g)$weight <- as.numeric(E(g)$weight)
+  if (igraph::ecount(g)) igraph::E(g)$weight <- as.numeric(igraph::E(g)$weight)
   deg <- igraph::degree(g, mode = "all")
   btw <- igraph::betweenness(g, directed = FALSE, weights = NA, normalized = TRUE)
   clo <- igraph::closeness(g, normalized = TRUE, weights = NA)
-  pr <- igraph::page_rank(g, directed = FALSE, weights = E(g)$weight)$vector
-  communities <- if (vcount(g) > 2 && ecount(g) > 0) {
-    igraph::cluster_louvain(igraph::as.undirected(g), weights = E(g)$weight)
+  pr <- igraph::page_rank(g, directed = FALSE,
+                          weights = igraph::E(g)$weight)$vector
+  communities <- if (igraph::vcount(g) > 2 && igraph::ecount(g) > 0) {
+    igraph::cluster_louvain(igraph::as.undirected(g),
+                            weights = igraph::E(g)$weight)
   } else NULL
-  comm_id <- if (is.null(communities)) rep(NA_integer_, vcount(g)) else
-    igraph::membership(communities)[V(g)$name]
+  comm_id <- if (is.null(communities)) rep(NA_integer_, igraph::vcount(g)) else
+    igraph::membership(communities)[igraph::V(g)$name]
   nodes <- data.table::data.table(
-    id = V(g)$name, degree = as.numeric(deg),
+    id = igraph::V(g)$name, degree = as.numeric(deg),
     betweenness = as.numeric(btw), closeness = as.numeric(clo),
     pagerank = as.numeric(pr), community = as.integer(comm_id)
   )
   stats <- data.table::data.table(
-    network = basename(path), nodes = vcount(g), edges = ecount(g),
+    network = basename(path), nodes = igraph::vcount(g),
+    edges = igraph::ecount(g),
     density = igraph::edge_density(g, loops = FALSE),
     components = igraph::components(g)$no,
     isolated_nodes = sum(deg == 0),
@@ -39,11 +42,11 @@ analyse_graph <- function(path) {
   png(file.path(PLOT_DIR, paste0(tools::file_path_sans_ext(basename(path)), ".png")),
       width = 1400, height = 1000, res = 140)
   set.seed(42)
-  if (vcount(g) > 0) {
-    vertex_colors <- if ("type" %in% vertex_attr_names(g)) {
-      ifelse(vertex_attr(g, "type") == "student", "#2C7FB8", "#F03B20")
+  if (igraph::vcount(g) > 0) {
+    vertex_colors <- if ("type" %in% igraph::vertex_attr_names(g)) {
+      ifelse(igraph::vertex_attr(g, "type") == "student", "#2C7FB8", "#F03B20")
     } else "#4D4D4D"
-    plot(g, layout = layout_with_fr(g),
+    igraph::plot.igraph(g, layout = igraph::layout_with_fr(g),
          vertex.color = vertex_colors, vertex.size = 4,
          vertex.label = NA, edge.width = 1,
          main = basename(path))

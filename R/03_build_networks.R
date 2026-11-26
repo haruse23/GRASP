@@ -12,12 +12,17 @@ make_bipartite <- function(x, suffix) {
   edges <- x[, .(weight = sum(sum_click, na.rm = TRUE)),
              by = .(student_id, resource_id)]
   nodes <- data.table::rbindlist(list(
-    x[, .(id = unique(student_id), type = "student")],
-    x[, .(id = unique(resource_id), type = "resource")]
+    x[, .(id = paste0("student:", unique(student_id)), type = "student")],
+    x[, .(id = paste0("resource:", unique(resource_id)), type = "resource")]
   ), fill = TRUE)
   nodes <- unique(nodes)
-  edges[, `:=`(from = student_id, to = resource_id)]
+  edges[, `:=`(
+    from = paste0("student:", student_id),
+    to = paste0("resource:", resource_id)
+  )]
   edges[, c("student_id", "resource_id") := NULL]
+  # igraph interprets the first two edge columns as source and target.
+  edges <- edges[, .(from, to, weight)]
   data.table::fwrite(nodes, file.path(NETWORK_DIR, paste0("nodes_", suffix, ".csv")))
   data.table::fwrite(edges, file.path(NETWORK_DIR, paste0("edges_", suffix, ".csv")))
   write_graphml(nodes, edges, file.path(NETWORK_DIR, paste0(suffix, ".graphml")))
@@ -28,12 +33,26 @@ make_projection <- function(x, dimension = c("student", "resource"), suffix) {
   dimension <- match.arg(dimension)
   if (dimension == "student") {
     wide <- x[, .(weight = sum(sum_click)), by = .(student_id, resource_id)]
-    wide <- dcast(wide, student_id ~ resource_id, value.var = "weight", fill = 0)
-    ids <- wide$student_id; mat <- as.matrix(wide[, -1])
+    ids <- unique(wide$student_id)
+    cols <- unique(wide$resource_id)
+    mat <- Matrix::sparseMatrix(
+      i = match(wide$student_id, ids),
+      j = match(wide$resource_id, cols),
+      x = wide$weight,
+      dims = c(length(ids), length(cols)),
+      dimnames = list(ids, cols)
+    )
   } else {
     wide <- x[, .(weight = sum(sum_click)), by = .(resource_id, student_id)]
-    wide <- dcast(wide, resource_id ~ student_id, value.var = "weight", fill = 0)
-    ids <- wide$resource_id; mat <- as.matrix(wide[, -1])
+    ids <- unique(wide$resource_id)
+    cols <- unique(wide$student_id)
+    mat <- Matrix::sparseMatrix(
+      i = match(wide$resource_id, ids),
+      j = match(wide$student_id, cols),
+      x = wide$weight,
+      dims = c(length(ids), length(cols)),
+      dimnames = list(ids, cols)
+    )
   }
   edges <- similarity_edges(mat, ids)
   nodes <- data.table::data.table(id = ids, type = dimension)
