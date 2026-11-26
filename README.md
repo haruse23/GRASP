@@ -18,6 +18,3 @@ Run from the repository root. Phase 1 writes profiling, cleaned data, and the
 network methodology to `outputs/`. Phase 3 writes node/edge CSV files and
 GraphML files. Phase 4 writes structural statistics, centrality, communities,
 and the SNA report.
-
-The repository currently contains Git LFS pointers for `data/studentVle.csv`
-and `data/vle.csv`; download the actual files before running the pipeline.
